@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Spatial OS</title>
+<style>
+:root{--glass:rgba(22,26,32,.55);--line:rgba(255,255,255,.24);--ink:#f4f7f5;--acc:#8ee3c8}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:var(--ink);font-family:"Segoe UI",Roboto,system-ui,sans-serif;overflow:hidden;touch-action:none}
+#start{position:fixed;inset:0;overflow:auto;padding:max(16px,env(safe-area-inset-top)) 20px 28px;background:#0d1114;touch-action:pan-y}
+#start h1{margin:.2em 0 .1em;font-size:1.9rem;letter-spacing:-.02em}
+#start p{color:#aab5b0;line-height:1.45;max-width:34em}
+#start .row{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+#start button,#start label.btn{font:inherit;font-weight:600;padding:14px 18px;border-radius:14px;border:1px solid var(--line);background:#1b2227;color:var(--ink)}
+#start button.main{background:var(--acc);color:#07201a;border:0}
+#start ul{padding-left:1.1em;color:#cdd6d1;line-height:1.7}
+#stage{position:fixed;inset:0;display:none;flex-direction:row;background:#000}
+.eye{position:relative;flex:1;height:100%;overflow:hidden;background:#111}
+.eye video.cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.layer{position:absolute;inset:0}
+.hud{position:absolute;left:0;right:0;bottom:.5em;text-align:center;font-size:.7em;color:#fff;text-shadow:0 0 6px #000;pointer-events:none;z-index:2000}
+.win{position:absolute;display:flex;flex-direction:column;background:var(--glass);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid var(--line);border-radius:1.1em;box-shadow:0 .8em 2.6em rgba(0,0,0,.45);overflow:hidden}
+.win.home{border-radius:1.6em}
+.bar{display:flex;align-items:center;justify-content:space-between;flex:none;padding:.3em .4em .3em .9em;font-weight:600;font-size:.85em;background:rgba(255,255,255,.09)}
+.bar .x{min-height:0;width:2.1em;height:2.1em;padding:0;border-radius:50%;background:rgba(255,120,110,.35)}
+.body{flex:1;min-height:0;position:relative;padding:.5em;display:flex;flex-direction:column;gap:.5em;overflow:hidden}
+.grip{position:absolute;right:0;bottom:0;width:1.8em;height:1.8em;border-right:.22em solid var(--acc);border-bottom:.22em solid var(--acc);border-bottom-right-radius:1.1em;opacity:.8}
+button,.tile{font:inherit;font-size:.8em;color:var(--ink);background:rgba(255,255,255,.13);border:1px solid var(--line);border-radius:.8em;padding:.4em .7em;min-height:2.6em}
+.row{display:flex;gap:.4em;align-items:center;flex-wrap:wrap}
+.row.c{justify-content:center}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:.5em;height:100%}
+.tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.1em;font-size:.75em;text-align:center}
+.tile span{font-size:2em;line-height:1}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;overflow:hidden}
+.grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:.6em}
+.big,.vid{flex:1;min-height:0;width:100%;object-fit:contain;border-radius:.6em;background:#000}
+.list{display:flex;flex-direction:column;gap:.4em;overflow:hidden}
+.list button{text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.scr{flex:1;overflow:hidden;border-radius:.6em;background:#fff}
+.scr iframe{width:100%;height:5000px;border:0;background:#fff}
+.empty{margin:auto;text-align:center;color:#cfd8d3;font-size:.8em;line-height:1.4;padding:1em}
+.guide{font-size:.7em;line-height:1.35;overflow:hidden;display:flex;flex-direction:column;gap:.35em}
+.guide div{display:flex;gap:.6em;align-items:flex-start}
+.guide b{flex:none;width:2.2em;text-align:center;font-size:1.5em;line-height:1}
+.cur{position:absolute;width:1.7em;height:1.7em;margin:-.85em 0 0 -.85em;border-radius:50%;border:.14em solid #fff;background:rgba(142,227,200,.2);pointer-events:none;display:none;z-index:1000;box-shadow:0 0 .6em rgba(0,0,0,.5)}
+.cur.p{background:var(--acc);transform:scale(.65)}
+.cur i{position:absolute;top:2em;left:50%;transform:translateX(-50%);font-style:normal;font-size:.6em;white-space:nowrap;text-shadow:0 0 4px #000}
+</style>
+</head>
+<body>
+
+<div id="start">
+  <h1>Spatial OS</h1>
+  <p>A floating, hand-controlled desktop on top of your phone camera. Add your photos and videos here first, then start and slide the phone into your VR viewer.</p>
+  <div class="row">
+    <label class="btn">Add photos / videos<input id="files" type="file" accept="image/*,video/*" multiple hidden></label>
+  </div>
+  <p id="cnt">Nothing added yet.</p>
+  <div class="row">
+    <button class="main" id="goSplit">Start in VR viewer (split screen)</button>
+    <button id="goOne">Start single view (testing)</button>
+  </div>
+  <p>Hand gestures</p>
+  <ul>
+    <li>Pinch (thumb + index) on a button: click</li>
+    <li>Pinch on empty space: open or close the Home menu</li>
+    <li>Pinch and hold the title bar, then move: drag a window</li>
+    <li>Pinch and hold the green corner: resize</li>
+    <li>Pinch with both hands, then spread or close: scale a window</li>
+    <li>Open palm for 1 second: Home menu</li>
+    <li>Fist for 1.2 seconds: close the front window</li>
+    <li>You can also use your finger on the screen as a cursor</li>
+  </ul>
+</div>
+
+<div id="stage"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const lib={img:[],vid:[]};
+let eyes=[],wins=[],zTop=10,split=true,depth=6,cam=null,seq=1,W=0,H=0,sc=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+$('#files').onchange=e=>{
+  for(const f of e.target.files){const o={name:f.name,url:URL.createObjectURL(f)};(f.type.startsWith('video')?lib.vid:lib.img).push(o)}
+  $('#cnt').textContent=lib.img.length+' photos, '+lib.vid.length+' videos ready.';
+};
+$('#goSplit').onclick=()=>go(true);
+$('#goOne').onclick=()=>go(false);
+
+/* ---------- apps ---------- */
+const empty=t=>`<div class="empty">${t}</div>`;
+const apps={
+  home:{title:'Home',w:1.0,h:.62,chrome:false,mount(b){
+    b.innerHTML=`<div class="tiles">
+      <div class="tile" data-act="launch" data-app="photos"><span>🖼</span>Photos</div>
+      <div class="tile" data-act="launch" data-app="videos"><span>🎞</span>Videos</div>
+      <div class="tile" data-act="launch" data-app="browser"><span>🌐</span>Browser</div>
+      <div class="tile" data-act="launch" data-app="guide"><span>✋</span>Gestures</div>
+      <div class="tile" data-act="launch" data-app="settings"><span>⚙</span>Settings</div>
+      <div class="tile" data-act="launch" data-app="home" style="visibility:hidden"></div></div>`}},
+  photos:{title:'Photos',w:1.0,h:.82,mount(b,w){
+    const i=w.st.i;
+    if(i==null) b.innerHTML=lib.img.length?`<div class="grid">${lib.img.map((m,k)=>`<img src="${m.url}" data-act="pv" data-i="${k}">`).join('')}</div>`:empty('No photos yet.<br>Add some on the start screen.');
+    else b.innerHTML=`<img class="big" src="${lib.img[i].url}"><div class="row c"><button data-act="pn" data-d="-1">◀ Back</button><button data-act="pb">All photos</button><button data-act="pn" data-d="1">Next ▶</button></div>`;
+  }},
+  videos:{title:'Videos',w:1.05,h:.82,mount(b,w,ei){
+    const i=w.st.i;
+    if(i==null) b.innerHTML=lib.vid.length?`<div class="list">${lib.vid.map((m,k)=>`<button data-act="vo" data-i="${k}">▶ ${esc(m.name)}</button>`).join('')}</div>`:empty('No videos yet.<br>Add some on the start screen.');
+    else b.innerHTML=`<video class="vid" src="${lib.vid[i].url}" playsinline autoplay loop ${ei?'muted':''}></video><div class="row c"><button data-act="vs" data-d="-10">−10s</button><button data-act="vp">Play / Pause</button><button data-act="vs" data-d="10">+10s</button><button data-act="vb">List</button></div>`;
+    const v=b.querySelector('video'); if(v&&ei) v.muted=true;
+  }},
+  browser:{title:'Browser',w:1.12,h:.9,mount(b,w){
+    const u=w.st.url;
+    if(!u) b.innerHTML=`<div class="tiles" style="grid-template-columns:repeat(2,1fr);height:auto">
+      <div class="tile" data-act="bg" data-url="https://en.m.wikipedia.org"><span>📚</span>Wikipedia</div>
+      <div class="tile" data-act="bg" data-url="https://www.openstreetmap.org/export/embed.html"><span>🗺</span>Map</div>
+      <div class="tile" data-act="bg" data-url="https://example.org"><span>📄</span>Example</div>
+      <div class="tile" data-act="bu"><span>⌨</span>Type address</div></div>
+      <div class="empty">Many sites refuse to open inside other apps. Wikipedia and maps work.</div>`;
+    else b.innerHTML=`<div class="row c"><button data-act="bh">⌂</button><button data-act="br">⟳</button><button data-act="bu">Address</button><button data-act="bs" data-dy="-1">▲</button><button data-act="bs" data-dy="1">▼</button></div><div class="scr"><iframe src="${esc(u)}" referrerpolicy="no-referrer"></iframe></div>`;
+  }},
+  guide:{title:'Gestures',w:1.1,h:.9,mount(b){
+    b.innerHTML=`<div class="guide">
+      <div><b>🤏</b><span><strong>Pinch</strong> thumb and index on a button to click.</span></div>
+      <div><b>🤏</b><span><strong>Pinch on empty space</strong> opens or closes Home.</span></div>
+      <div><b>↔</b><span><strong>Pinch and hold the title bar</strong>, move your hand to drag a window.</span></div>
+      <div><b>◢</b><span><strong>Pinch and hold the green corner</strong> to resize.</span></div>
+      <div><b>🤏🤏</b><span><strong>Pinch with both hands</strong>, spread or close to scale the window under them.</span></div>
+      <div><b>✋</b><span><strong>Open palm 1s</strong> opens Home.</span></div>
+      <div><b>✊</b><span><strong>Fist 1.2s</strong> closes the front window.</span></div></div>`}},
+  settings:{title:'Settings',w:.9,h:.62,mount(b){
+    b.innerHTML=`<div class="row c">Depth <button data-act="dp" data-d="-2">−</button><strong>${depth}</strong><button data-act="dp" data-d="2">+</button></div>
+      <div class="row c"><button data-act="sp">${split?'Switch to single view':'Switch to VR split'}</button></div>
+      <div class="row c"><button data-act="exit">Exit</button></div>`}}
+};
+
+/* ---------- windows ---------- */
+function openWin(app,cx,cy){
+  const a=apps[app];
+  const w={id:seq++,app,st:{},z:++zTop,els:[]};
+  w.w=Math.min(a.w*H,W*.94); w.h=Math.min(a.h*H,H*.94);
+  w.x=clamp(cx-w.w/2,0,W-w.w); w.y=clamp(cy-w.h/2,0,H-w.h);
+  wins.push(w); mountWin(w); return w;
+}
+function mountWin(w){
+  const a=apps[w.app];
+  w.els.forEach(e=>e&&e.remove()); w.els=[];
+  eyes.forEach((eye,ei)=>{
+    const el=document.createElement('div');
+    el.className='win'+(a.chrome===false?' home':''); el.dataset.w=w.id;
+    el.innerHTML=(a.chrome===false?'':`<div class="bar" data-drag><span>${a.title}</span><button class="x" data-act="close">✕</button></div>`)+`<div class="body"></div>`+(a.chrome===false?'':'<div class="grip" data-resize></div>');
+    eye.layer.insertBefore(el,eye.cur[0]);
+    w.els[ei]=el; a.mount(el.querySelector('.body'),w,ei);
+  });
+  place(w);
+}
+function remount(w){ eyes.forEach((e,ei)=>apps[w.app].mount(w.els[ei].querySelector('.body'),w,ei)); }
+function place(w){ w.els.forEach(el=>{const s=el.style;s.left=w.x+'px';s.top=w.y+'px';s.width=w.w+'px';s.height=w.h+'px';s.zIndex=w.z}); }
+function closeWin(w){ if(!w)return; w.els.forEach(e=>e.remove()); wins=wins.filter(x=>x!==w); }
+function focusWin(w){ w.z=++zTop; place(w); }
+function winOf(el){ const e=el&&el.closest&&el.closest('[data-w]'); return e?wins.find(w=>w.id==e.dataset.w):null; }
+function toggleHome(x,y){ const h=wins.find(w=>w.app==='home'); if(h)closeWin(h); else openWin('home',x,y); }
+const vids=w=>w.els.map(e=>e.querySelector('video')).filter(Boolean);
+
+function act(a,d,w){
+  switch(a){
+    case 'close': closeWin(w);break;
+    case 'launch':{const h=wins.find(x=>x.app==='home');const cx=h?h.x+h.w/2:W/2,cy=h?h.y+h.h/2:H/2;closeWin(h);openWin(d.app,cx,cy);break}
+    case 'pv': w.st.i=+d.i;remount(w);break;
+    case 'pb': w.st.i=null;remount(w);break;
+    case 'pn': w.st.i=(w.st.i+ +d.d+lib.img.length)%lib.img.length;remount(w);break;
+    case 'vo': w.st.i=+d.i;remount(w);break;
+    case 'vb': w.st.i=null;remount(w);break;
+    case 'vp':{const v=vids(w);if(!v.length)break;const p=v[0].paused;v.forEach(x=>p?x.play():x.pause());break}
+    case 'vs': vids(w).forEach(x=>x.currentTime=Math.max(0,x.currentTime+ +d.d));break;
+    case 'bg': w.st.url=d.url;remount(w);break;
+    case 'bh': w.st.url=null;remount(w);break;
+    case 'br': remount(w);break;
+    case 'bu':{const u=prompt('Web address',w.st.url||'https://');if(u){w.st.url=/^https?:\/\//.test(u)?u:'https://'+u;remount(w)}break}
+    case 'bs': w.els.forEach(e=>{const s=e.querySelector('.scr');if(s)s.scrollTop+=+d.dy*H*.45});break;
+    case 'dp': depth=clamp(depth+ +d.d,0,24);applyShift();remount(w);break;
+    case 'sp': split=!split;build();break;
+    case 'exit': location.reload();break;
+  }
+}
+$('#stage').addEventListener('click',e=>{
+  const a=e.target.closest('[data-act]'); if(!a)return;
+  act(a.dataset.act,a.dataset,winOf(a));
+});
+
+/* ---------- stage / eyes ---------- */
+function build(){
+  const st=$('#stage'); st.innerHTML=''; eyes=[];
+  for(let i=0;i<(split?2:1);i++){
+    const el=document.createElement('div'); el.className='eye';
+    const v=document.createElement('video'); v.className='cam'; v.muted=true; v.autoplay=true; v.playsInline=true; v.srcObject=cam; v.play().catch(()=>{});
+    const layer=document.createElement('div'); layer.className='layer';
+    const cur=[0,1,2].map(()=>{const c=document.createElement('div');c.className='cur';c.innerHTML='<i></i>';layer.appendChild(c);return c});
+    const hud=document.createElement('div'); hud.className='hud'; hud.textContent=window._hud||'';
+    el.append(v,layer,hud); st.appendChild(el);
+    eyes.push({el,video:v,layer,cur,hud});
+  }
+  W=eyes[0].el.clientWidth; H=eyes[0].el.clientHeight;
+  document.documentElement.style.fontSize=(H/22)+'px';
+  applyShift();
+  wins.forEach(w=>{w.w=Math.min(w.w,W*.94);w.h=Math.min(w.h,H*.94);w.x=clamp(w.x,0,W-w.w);w.y=clamp(w.y,0,H-w.h);mountWin(w)});
+}
+function applyShift(){ eyes.forEach((e,i)=>e.layer.style.transform=split?`translateX(${i?-depth:depth}px)`:''); }
+function hud(t){ window._hud=t; eyes.forEach(e=>e.hud.textContent=t); }
+addEventListener('resize',()=>{ if(eyes.length) build(); });
+
+async function go(sp){
+  split=sp;
+  try{ cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false}); }
+  catch(e){ alert('Camera is blocked: '+e.message+'\nAllow camera access and try again.'); return; }
+  $('#start').style.display='none'; $('#stage').style.display='flex';
+  try{ await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); }catch(e){}
+  setTimeout(()=>{ build(); openWin('home',W/2,H/2); loadHands(); },250);
+}
+
+/* ---------- input state machine ---------- */
+const mk=()=>({vis:false,np:false,pin:false,x:0,y:0,mode:null,target:null,hg:'',t0:0,fired:false,native:false,moved:0});
+const slots=[mk(),mk(),mk()]; slots[2].native=true;
+
+function hitAt(x,y){
+  const r=eyes[0].el.getBoundingClientRect();
+  return document.elementFromPoint(r.left+x+(split?depth:0),r.top+y);
+}
+function press(s){
+  const el=hitAt(s.x,s.y); s.target=el; s.t0=performance.now(); s.x0=s.x; s.y0=s.y; s.moved=0; s.mode='none';
+  const w=winOf(el);
+  if(!w){ toggleHome(s.x,s.y); return; }
+  focusWin(w);
+  if(el.closest('[data-act]')) s.mode='press';
+  else if(el.closest('[data-drag]')){s.mode='drag';s.w=w;s.ox=s.x-w.x;s.oy=s.y-w.y}
+  else if(el.closest('[data-resize]')){s.mode='rs';s.w=w;s.ox=s.x-w.w;s.oy=s.y-w.h}
+  else s.mode='press';
+}
+function move(s){
+  if(s.mode==='drag'){ const w=s.w; w.x=clamp(s.x-s.ox,-w.w*.6,W-w.w*.4); w.y=clamp(s.y-s.oy,0,H-w.h*.3); place(w); }
+  else if(s.mode==='rs'){ const w=s.w; w.w=clamp(s.x-s.ox,H*.45,W*1.2); w.h=clamp(s.y-s.oy,H*.3,H*1.1); place(w); }
+  else if(s.mode==='press'){ s.moved=Math.max(s.moved,Math.hypot(s.x-s.x0,s.y-s.y0)); }
+}
+function release(s){
+  if(s.mode==='press'&&!s.native&&s.moved<H*.12&&performance.now()-s.t0<1200){
+    const a0=s.target&&s.target.closest&&s.target.closest('[data-act]');
+    const el=hitAt(s.x,s.y), a=el&&el.closest('[data-act]');
+    if(a0&&a) a.click();
+  }
+  s.mode=null; s.target=null;
+}
+function step(s,pin){
+  const was=s.pin; s.pin=pin;
+  if(pin&&!was) press(s); else if(!pin&&was) release(s); else if(pin) move(s);
+}
+function frame(){
+  const a=slots[0],b=slots[1];
+  const two=a.vis&&b.vis&&a.np&&b.np;
+  if(two){
+    const d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(!sc){
+      const el=hitAt((a.x+b.x)/2,(a.y+b.y)/2), w=winOf(el);
+      if(w&&w.app!=='home'){ sc={w,d0:d||1,w0:w.w,h0:w.h,cx:w.x+w.w/2,cy:w.y+w.h/2}; focusWin(w); }
+      else sc={w:null};
+      [a,b].forEach(s=>{s.mode='scale';s.pin=true});
+    }
+    if(sc.w){ const k=d/sc.d0,w=sc.w; w.w=clamp(sc.w0*k,H*.45,W*1.3); w.h=clamp(sc.h0*k,H*.3,H*1.2); w.x=sc.cx-w.w/2; w.y=sc.cy-w.h/2; place(w); }
+  } else {
+    if(sc){ sc=null; [a,b].forEach(s=>{if(s.mode==='scale'){s.mode=null;s.pin=s.np}}); }
+    for(const s of [a,b]){ if(s.vis) step(s,s.np); else if(s.pin){ s.pin=false; release(s); } }
+  }
+  draw();
+}
+function draw(){
+  const now=performance.now();
+  eyes.forEach(e=>slots.forEach((s,i)=>{
+    const c=e.cur[i];
+    if(!s.vis){c.style.display='none';return}
+    c.style.display='block'; c.style.left=s.x+'px'; c.style.top=s.y+'px';
+    c.classList.toggle('p',s.pin); c.firstChild.textContent=s.label||'';
+  }));
+}
+
+/* ---------- hand tracking ---------- */
+function feed(s,l,vw,vh){
+  const P=i=>[l[i].x*vw,l[i].y*vh], d=(i,j)=>Math.hypot(P(i)[0]-P(j)[0],P(i)[1]-P(j)[1]);
+  const size=d(0,9)||1, pd=d(4,8)/size;
+  s.np = s.np ? pd<.5 : pd<.3;
+  const ext=[[8,6],[12,10],[16,14],[20,18]].map(([t,p])=>d(t,0)>d(p,0)*1.1);
+  const palm=ext.every(Boolean)&&d(4,17)/size>.8, fist=!s.np&&ext.every(e=>!e);
+  const mx=(l[4].x+l[8].x)/2*vw, my=(l[4].y+l[8].y)/2*vh;
+  const k=Math.max(W/vw,H/vh), dw=vw*k, dh=vh*k;
+  const px=mx*k-(dw-W)/2, py=my*k-(dh-H)/2;
+  if(s.vis){s.x+=(px-s.x)*.55;s.y+=(py-s.y)*.55}else{s.x=px;s.y=py}
+  s.vis=true;
+  const key=s.np?'pin':palm?'palm':fist?'fist':'';
+  if(key!==s.hg){s.hg=key;s.t0g=performance.now();s.fired=false}
+  s.label='';
+  if((key==='palm'||key==='fist')&&!s.fired){
+    const need=key==='palm'?1000:1200, t=performance.now()-s.t0g;
+    s.label=(key==='palm'?'Home ':'Close ')+Math.round(Math.min(100,t/need*100))+'%';
+    if(t>need){ s.fired=true; s.label=''; if(key==='palm') toggleHome(s.x,s.y); else { const top=wins.filter(w=>w.app!=='home').sort((a,b)=>b.z-a.z)[0]||wins[0]; closeWin(top); } }
+  }
+}
+function onRes(r){
+  const lm=r.multiHandLandmarks||[], v=eyes[0].video, vw=v.videoWidth, vh=v.videoHeight;
+  if(!vw) return;
+  for(let i=0;i<2;i++){ const s=slots[i]; if(lm[i]) feed(s,lm[i],vw,vh); else {s.vis=false;s.np=false;s.hg='';s.label=''} }
+  if(lm.length) hud(''); else if(window._hud==='') hud('Show your hand to the camera');
+  frame();
+}
+function loadHands(){
+  hud('Loading hand tracking…');
+  const base='https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+  const s=document.createElement('script'); s.src=base+'hands.js';
+  s.onerror=()=>hud('Hand tracking needs internet. Touch cursor still works.');
+  s.onload=async()=>{
+    try{
+      const h=new Hands({locateFile:f=>base+f});
+      h.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.6,minTrackingConfidence:.5});
+      h.onResults(onRes); await h.initialize(); hud('Show your hand to the camera');
+      const loop=async()=>{ const v=eyes[0]&&eyes[0].video; if(v&&v.readyState>=2){ try{await h.send({image:v})}catch(e){} } requestAnimationFrame(loop); };
+      loop();
+    }catch(e){ hud('Hand tracking failed to start. Touch cursor still works.'); }
+  };
+  document.head.appendChild(s);
+}
+
+/* ---------- touch / mouse as a fallback cursor ---------- */
+(function(){
+  const st=$('#stage'), t=slots[2]; let down=false;
+  const pos=e=>{
+    const r=st.getBoundingClientRect(); let x=e.clientX-r.left, y=e.clientY-r.top, sh=0;
+    if(split){ const right=x>=W; x=x%W; sh=right?-depth:depth; }
+    t.x=x-sh; t.y=y; t.vis=true;
+  };
+  st.addEventListener('pointerdown',e=>{ if(!eyes.length)return; down=true; pos(e); step(t,true); draw(); });
+  st.addEventListener('pointermove',e=>{ if(!down)return; pos(e); step(t,true); draw(); });
+  const up=e=>{ if(!down)return; down=false; step(t,false); t.vis=false; draw(); };
+  st.addEventListener('pointerup',up); st.addEventListener('pointercancel',up);
+})();
+
+/* ---------- keep the second eye's video in sync ---------- */
+setInterval(()=>{
+  wins.forEach(w=>{ const v=vids(w); if(v.length<2)return;
+    if(v[1].paused!==v[0].paused) v[0].paused?v[1].pause():v[1].play().catch(()=>{});
+    if(Math.abs(v[1].currentTime-v[0].currentTime)>.25) v[1].currentTime=v[0].currentTime; });
+  eyes.forEach(e=>e.el.querySelectorAll('.scr')); 
+  wins.forEach(w=>{ if(w.app==='browser'&&w.els.length>1){ const a=w.els[0].querySelector('.scr'),b=w.els[1].querySelector('.scr'); if(a&&b) b.scrollTop=a.scrollTop; } });
+},400);
+</script>
+</body>
+</html>
